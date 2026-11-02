@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>세포 에너지 공장 (Cell Energy Factory)</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+    body {
+      font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
+      background: #0f172a; color: #f8fafc;
+      min-height: 100vh; display: flex; justify-content: center; align-items: center;
+      overflow: hidden; position: relative;
+    }
+    #game-container {
+      width: 100%; max-width: 800px; height: 90vh;
+      background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px);
+      border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex; flex-direction: column; padding: 20px; gap: 16px;
+      position: relative; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(15, 23, 42, 0.6); padding: 12px 20px; border-radius: 16px;
+    }
+    .day-night { font-size: 18px; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+    .atp-container { flex: 1; max-width: 250px; margin: 0 16px; }
+    .progress-bar { width: 100%; height: 16px; background: #334155; border-radius: 8px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #ef4444); width: 50%; transition: width 0.3s; }
+    .inventory {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+      background: rgba(15, 23, 42, 0.4); padding: 12px; border-radius: 16px;
+    }
+    .inv-item {
+      background: rgba(51, 65, 85, 0.5); padding: 8px; border-radius: 12px;
+      text-align: center; border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .inv-item .val { font-size: 20px; font-weight: bold; margin-top: 4px; color: #38bdf8; }
+    .organelles { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; flex: 1; }
+    .card {
+      background: rgba(30, 41, 59, 0.6); border-radius: 16px; padding: 16px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      border: 1px solid rgba(255, 255, 255, 0.08); position: relative;
+    }
+    .card h3 { display: flex; align-items: center; gap: 8px; font-size: 18px; margin-bottom: 8px; }
+    .card p { font-size: 13px; color: #94a3b8; margin-bottom: 12px; line-height: 1.4; }
+    .btn {
+      width: 100%; padding: 14px; border: none; border-radius: 12px;
+      font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-green { background: #10b981; color: white; }
+    .btn-green:hover { background: #059669; }
+    .btn-blue { background: #3b82f6; color: white; }
+    .btn-blue:hover { background: #2563eb; }
+    .btn:disabled { background: #475569; opacity: 0.5; cursor: not-allowed; }
+    
+    /* 화면 최상단 터치 입자 */
+    .photon {
+      position: absolute; width: 64px; height: 64px;
+      background: radial-gradient(circle, #fef08a 0%, #eab308 100%);
+      border-radius: 50%; display: flex; justify-content: center; align-items: center;
+      font-size: 32px; cursor: pointer; z-index: 9999;
+      box-shadow: 0 0 25px #fde047; animation: float 2.5s infinite ease-in-out;
+    }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    
+    .popup-text {
+      position: absolute; color: #fef08a; font-weight: bold; font-size: 22px;
+      pointer-events: none; animation: fadeUp 0.8s forwards; z-index: 10000;
+    }
+    @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
+    
+    /* 모달 */
+    .modal {
+      position: absolute; inset: 0; background: rgba(15, 23, 42, 0.95);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      padding: 30px; text-align: center; z-index: 20000;
+    }
+    .modal h2 { font-size: 32px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <div class="header">
+    <div class="day-night" id="env-time">☀️ 낮 (Day 1)</div>
+    <div class="atp-container">
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+        <span>세포 ATP 에너지</span>
+        <span id="atp-val">50 / 100</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="atp-bar"></div></div>
+    </div>
+    <div style="font-size: 14px; font-weight: bold;" id="timer">남은 시간: 20초</div>
+  </div>
+
+  <div class="inventory">
+    <div class="inv-item">☀️ 빛<div class="val" id="res-light">0</div></div>
+    <div class="inv-item">💧 물(H₂O)<div class="val" id="res-water">12</div></div>
+    <div class="inv-item">☁️ CO₂<div class="val" id="res-co2">12</div></div>
+    <div class="inv-item">🧪 포도당<div class="val" id="res-glucose">0</div></div>
+    <div class="inv-item">🫧 산소(O₂)<div class="val" id="res-o2">0</div></div>
+  </div>
+
+  <div class="organelles">
+    <div class="card">
+      <div>
+        <h3>🌿 엽록체 (Chloroplast)</h3>
+        <p>화면에 떨어지는 노란색 빛(☀️)을 직접 터치해 수집하세요!<br><b>필요:</b> 빛 10 + 물 6 + CO₂ 6<br><b>생산:</b> 포도당 1 + 산소 6</p>
+      </div>
+      <button class="btn btn-green" id="btn-photosynthesis" onclick="runPhotosynthesis()">🌿 광합성 실행</button>
+    </div>
+
+    <div class="card">
+      <div>
+        <h3>⚡ 마이토콘드리아 (Mitochondria)</h3>
+        <p>낮에 확보한 포도당과 산소로 ATP를 대량 생성하세요.<br><b>필요:</b> 포도당 1 + 산소 6<br><b>생산:</b> 32 ATP + 물 6 + CO₂ 6 (자동 재활용)</p>
+      </div>
+      <button class="btn btn-blue" id="btn-respiration" onclick="runRespiration()">⚡ 세포 호흡 실행</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal">
+  <h2 id="modal-title">세포 에너지 공장</h2>
+  <p id="modal-desc" style="color: #94a3b8; margin-bottom: 24px; line-height: 1.6;">
+    화면에 뜨는 <b>노란색 햇빛 입자(☀️)를 직접 터치</b>해서 빛 에너지를 수집하세요.<br>
+    5일 동안 세포가 사멸하지 않게 ATP를 공급하면 승리합니다!
+  </p>
+  <button class="btn btn-green" style="max-width: 200px;" onclick="startGame()">게임 시작하기</button>
+</div>
+
+<script>
+  let state = {
+    day: 1, isDay: true, timeLeft: 20,
+    light: 0, water: 12, co2: 12, glucose: 0, o2: 0, atp: 50,
+    gameRunning: false
+  };
+
+  let timerInterval, photonInterval;
+
+  function startGame() {
+    document.getElementById('modal').style.display = 'none';
+    state = { day: 1, isDay: true, timeLeft: 20, light: 0, water: 12, co2: 12, glucose: 0, o2: 0, atp: 50, gameRunning: true };
+    updateUI();
+    
+    timerInterval = setInterval(() => {
+      if (!state.gameRunning) return;
+      
+      state.timeLeft--;
+      state.atp = Math.max(0, state.atp - 2);
+      
+      if (state.atp <= 0) endGame(false, "ATP가 고갈되어 세포가 사멸했습니다.");
+      
+      if (state.timeLeft <= 0) {
+        state.timeLeft = 20;
+        state.isDay = !state.isDay;
+        if (state.isDay) state.day++;
+        if (state.day > 5) endGame(true, "5일 동안 성공적으로 세포를 지켜냈습니다!");
+      }
+      
+      updateUI();
+    }, 1000);
+
+    photonInterval = setInterval(() => {
+      if (state.gameRunning && state.isDay) spawnPhoton();
+    }, 1200);
+  }
+
+  function spawnPhoton() {
+    const container = document.getElementById('game-container');
+    const photon = document.createElement('div');
+    photon.className = 'photon';
+    photon.innerHTML = '☀️';
+    
+    const x = Math.random() * (container.clientWidth - 80) + 10;
+    const y = Math.random() * (container.clientHeight - 200) + 80;
+    
+    photon.style.left = x + 'px';
+    photon.style.top = y + 'px';
+    
+    photon.onclick = (e) => {
+      state.light += 5;
+      showPopup(e.clientX, e.clientY, "+5 ☀️");
+      photon.remove();
+      updateUI();
+    };
+
+    container.appendChild(photon);
+    setTimeout(() => { if (photon.parentNode) photon.remove(); }, 3500);
+  }
+
+  function
